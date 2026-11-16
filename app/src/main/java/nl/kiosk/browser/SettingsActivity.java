@@ -4,7 +4,9 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.InputType;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.Spinner;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -15,8 +17,10 @@ import android.widget.Toast;
 public class SettingsActivity extends Activity {
     static boolean urlChanged;
     private Prefs prefs;
-    private EditText url, ssSec, reload, newPin;
-    private CheckBox ss, lock, boot, motion;
+    private EditText url, ssSec, reload, newPin, zoom;
+    private Spinner orient, saverType;
+    private EditText yt;
+    private CheckBox ss, lock, boot, motion, web;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -29,13 +33,43 @@ public class SettingsActivity extends Activity {
         sv.addView(l);
         setContentView(sv);
 
+        TextView addr = new TextView(this);
+        String ip = WebServer.localIp();
+        addr.setText(WebServer.running() && ip != null
+                ? "Instellen via je computer: http://" + ip + ":" + WebServer.PORT
+                : "Webinterface niet actief (geen netwerk of uitgeschakeld)");
+        addr.setTextIsSelectable(true);
+        l.addView(addr);
+
         url = field(l, "Webadres (URL)", prefs.url(), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         reload = field(l, "Pagina automatisch herladen (minuten, 0 = nooit)", "" + prefs.reloadMinutes(), InputType.TYPE_CLASS_NUMBER);
+        zoom = field(l, "Paginazoom in % (100 = normaal, 130 = groter)", "" + prefs.zoom(), InputType.TYPE_CLASS_NUMBER);
+        TextView ot = new TextView(this);
+        ot.setText("Schermstand");
+        ot.setPadding(0, 24, 0, 0);
+        l.addView(ot);
+        orient = new Spinner(this);
+        orient.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"Automatisch", "Liggend", "Staand"}));
+        orient.setSelection(prefs.orientation());
+        l.addView(orient);
         ss = check(l, "Screensaver met klok inschakelen", prefs.screensaver());
+        TextView st = new TextView(this);
+        st.setText("Screensaver-type");
+        st.setPadding(0, 24, 0, 0);
+        l.addView(st);
+        saverType = new Spinner(this);
+        saverType.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item,
+                new String[]{"Flip-klok met seconden", "YouTube-video (zonder geluid)"}));
+        saverType.setSelection(prefs.saverType());
+        l.addView(saverType);
+        yt = field(l, "YouTube-link (video of afspeellijst)", prefs.youtube(),
+                InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         ssSec = field(l, "Screensaver na (seconden zonder aanraking)", "" + prefs.screensaverSeconds(), InputType.TYPE_CLASS_NUMBER);
         motion = check(l, "Screensaver uit bij beweging (camera)", prefs.motion());
         lock = check(l, "Kioskmodus (scherm vastzetten, geen navigatie)", prefs.lock());
         boot = check(l, "Automatisch starten na herstart van het apparaat", prefs.autostart());
+        web = check(l, "Webinterface (instellen via computer, geldt na herstart van de app)", prefs.webEnabled());
         newPin = field(l, "Nieuwe pincode (leeg laten = ongewijzigd)", "",
                 InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
 
@@ -88,6 +122,10 @@ public class SettingsActivity extends Activity {
             return;
         }
         prefs.save(u, ss.isChecked(), Math.max(5, num(ssSec, 60)), lock.isChecked(), boot.isChecked(), num(reload, 0), motion.isChecked());
+        prefs.saveView(Math.min(300, Math.max(50, num(zoom, 100))), orient.getSelectedItemPosition());
+        prefs.saveSaver(saverType.getSelectedItemPosition(), yt.getText().toString().trim());
+        prefs.saveWeb(web.isChecked());
+        urlChanged = true; // pagina opnieuw laden zodat zoom direct werkt
         if (!pin.isEmpty()) prefs.setPin(pin);
         finish();
     }

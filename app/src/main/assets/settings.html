@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiosk Browser - Instellingen</title>
+<style>
+  :root{--bg:#111318;--card:#1b1e26;--line:#2c313c;--txt:#e8eaf0;--mut:#8b92a3;--acc:#4f8cff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.5 system-ui,Segoe UI,Arial,sans-serif;padding:24px 16px}
+  main{max-width:640px;margin:0 auto}
+  h1{font-size:1.5rem;margin:0 0 4px} p.sub{color:var(--mut);margin:0 0 20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+  h2{font-size:1rem;margin:0 0 12px;color:var(--acc)}
+  label{display:block;margin:12px 0 4px;font-size:.9rem;color:var(--mut)}
+  input[type=text],input[type=password],input[type=number],select{width:100%;padding:10px 12px;border-radius:9px;
+    border:1px solid var(--line);background:#12151b;color:var(--txt);font-size:1rem}
+  .chk{display:flex;gap:10px;align-items:center;margin:12px 0 0;color:var(--txt)} .chk input{width:20px;height:20px}
+  button{padding:11px 18px;border:0;border-radius:9px;background:var(--acc);color:#fff;font-size:1rem;cursor:pointer;margin:6px 8px 0 0}
+  button.sec{background:#2c313c}
+  #msg{margin-top:12px;min-height:1.4em} .err{color:#ff7a7a} .ok{color:#6fdc8c}
+  .hint{font-size:.8rem;color:var(--mut);margin-top:4px}
+  [hidden]{display:none!important}
+</style></head><body><main>
+<h1>Kiosk Browser</h1><p class="sub">Instellingen op afstand</p>
+
+<section id="login" class="card">
+  <h2>Inloggen</h2>
+  <label for="pin">Pincode van de tablet</label>
+  <input id="pin" type="password" inputmode="numeric" autocomplete="off">
+  <button id="go">Inloggen</button><div id="lmsg" class="err"></div>
+</section>
+
+<form id="form" hidden>
+  <div class="card"><h2>Pagina</h2>
+    <label>Webadres (URL)</label><input id="url" type="text">
+    <label>Paginazoom in % (100 = normaal)</label><input id="zoom" type="number" min="50" max="300">
+    <label>Schermstand</label>
+    <select id="orient"><option value="0">Automatisch</option><option value="1">Liggend</option><option value="2">Staand</option></select>
+    <label>Pagina automatisch herladen (minuten, 0 = nooit)</label><input id="reload" type="number" min="0">
+  </div>
+  <div class="card"><h2>Screensaver</h2>
+    <div class="chk"><input id="screensaver" type="checkbox"><span>Screensaver inschakelen</span></div>
+    <label>Type</label>
+    <select id="saverType"><option value="0">Flip-klok met seconden</option><option value="1">YouTube-video (zonder geluid)</option></select>
+    <label>YouTube-link (video of afspeellijst)</label><input id="yt" type="text">
+    <label>Start na (seconden zonder aanraking)</label><input id="ssSec" type="number" min="5">
+    <div class="chk"><input id="motion" type="checkbox"><span>Screensaver uit bij beweging (camera)</span></div>
+  </div>
+  <div class="card"><h2>Kiosk en beveiliging</h2>
+    <div class="chk"><input id="lock" type="checkbox"><span>Kioskmodus (scherm vastzetten)</span></div>
+    <div class="chk"><input id="boot" type="checkbox"><span>Automatisch starten na herstart</span></div>
+    <div class="chk"><input id="web" type="checkbox"><span>Webinterface ingeschakeld (geldt na herstart van de app)</span></div>
+    <label>Nieuwe pincode (leeg laten = ongewijzigd)</label><input id="newPin" type="password" inputmode="numeric" autocomplete="new-password">
+    <div class="hint">Let op: de verbinding is niet versleuteld. Gebruik de webinterface alleen op je eigen netwerk.</div>
+  </div>
+  <button type="submit">Opslaan</button>
+  <button type="button" class="sec" id="reloadBtn">Pagina nu herladen</button>
+  <div id="msg"></div>
+</form>
+
+<script>
+  const $ = id => document.getElementById(id);
+  let pin = '';
+  const api = (path, data = {}) => fetch('/api/' + path, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(Object.assign({pin}, data))
+  }).then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Fout'); return j; });
+  const text = ['url','yt'], num = ['zoom','reload','ssSec','orient','saverType'],
+        bool = ['screensaver','motion','lock','boot','web'];
+  function fill(s) {
+    text.forEach(k => $(k).value = s[k]); num.forEach(k => $(k).value = s[k]); bool.forEach(k => $(k).checked = s[k]);
+  }
+  async function login() {
+    pin = $('pin').value; $('lmsg').textContent = '';
+    try { fill(await api('get')); $('login').hidden = true; $('form').hidden = false; }
+    catch (e) { $('lmsg').textContent = e.message; pin = ''; }
+  }
+  $('go').onclick = login;
+  $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+  $('form').onsubmit = async e => {
+    e.preventDefault();
+    const d = {newPin: $('newPin').value};
+    text.forEach(k => d[k] = $(k).value); num.forEach(k => d[k] = parseInt($(k).value || '0', 10));
+    bool.forEach(k => d[k] = $(k).checked);
+    try {
+      await api('save', d);
+      if (d.newPin) { pin = d.newPin; $('newPin').value = ''; }
+      $('msg').className = 'ok'; $('msg').textContent = 'Opgeslagen. De tablet past de wijzigingen direct toe.';
+    } catch (err) { $('msg').className = 'err'; $('msg').textContent = err.message; }
+  };
+  $('reloadBtn').onclick = async () => {
+    try { await api('reload'); $('msg').className = 'ok'; $('msg').textContent = 'Pagina wordt herladen.'; }
+    catch (err) { $('msg').className = 'err'; $('msg').textContent = err.message; }
+  };
+</script></main></body></html>

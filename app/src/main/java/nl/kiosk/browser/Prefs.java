@@ -18,6 +18,16 @@ final class Prefs {
     int reloadMinutes() { return p.getInt("reload", 0); }
 
     boolean motion() { return p.getBoolean("motion", true); }
+    /** 0 = flip-klok, 1 = YouTube-video */
+    int saverType() { return p.getInt("ssType", 0); }
+    String youtube() { return p.getString("yt", ""); }
+    void saveSaver(int type, String yt) { p.edit().putInt("ssType", type).putString("yt", yt).apply(); }
+    boolean webEnabled() { return p.getBoolean("web", true); }
+    void saveWeb(boolean on) { p.edit().putBoolean("web", on).apply(); }
+    int zoom() { return p.getInt("zoom", 100); }
+    /** 0 = automatisch, 1 = liggend, 2 = staand */
+    int orientation() { return p.getInt("orient", 0); }
+    void saveView(int zoom, int orient) { p.edit().putInt("zoom", zoom).putInt("orient", orient).apply(); }
 
     void save(String url, boolean ss, int ssSec, boolean lock, boolean boot, int reload, boolean motion) {
         p.edit().putString("url", url).putBoolean("ss", ss).putInt("ssSec", ssSec)

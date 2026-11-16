@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:"Helvetica Neue",Arial,sans-serif}
+  body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5vmin}
+  #row{display:flex;align-items:center;gap:2vmin;--w:min(13.5vw,25vh)}
+  .pair{display:flex;gap:1.2vmin}
+  .colon{display:flex;flex-direction:column;gap:calc(var(--w)*.28)}
+  .colon i{width:calc(var(--w)*.1);height:calc(var(--w)*.1);border-radius:50%;background:#555}
+  .card{position:relative;width:var(--w);height:calc(var(--w)*1.35);perspective:calc(var(--w)*4);
+        font-size:calc(var(--w)*1.0);font-weight:700;color:#e8e8e8}
+  .half{position:absolute;left:0;width:100%;height:50%;overflow:hidden;background:#1c1c1e;backface-visibility:hidden}
+  .half span{position:absolute;left:0;width:100%;height:200%;line-height:calc(var(--w)*1.35);text-align:center}
+  .top,.ftop{top:0;border-radius:calc(var(--w)*.09) calc(var(--w)*.09) 0 0;transform-origin:bottom;
+             border-bottom:1px solid #000;box-sizing:border-box}
+  .bottom,.fbottom{bottom:0;border-radius:0 0 calc(var(--w)*.09) calc(var(--w)*.09);transform-origin:top;background:#232325}
+  .top span,.ftop span{top:0}
+  .bottom span,.fbottom span{bottom:0}
+  .ftop,.fbottom{visibility:hidden}
+  .go .ftop{visibility:visible;animation:t .3s ease-in forwards}
+  .go .fbottom{visibility:visible;transform:rotateX(90deg);animation:b .3s ease-out .3s forwards}
+  @keyframes t{to{transform:rotateX(-90deg)}}
+  @keyframes b{to{transform:rotateX(0)}}
+  #date{color:#9a9a9f;font-size:min(4.2vw,6vh);letter-spacing:.05em}
+  #date::first-letter{text-transform:uppercase}
+</style></head>
+<body>
+<div id="row">
+  <div class="pair"><div class="card" id="d0"></div><div class="card" id="d1"></div></div>
+  <div class="colon"><i></i><i></i></div>
+  <div class="pair"><div class="card" id="d2"></div><div class="card" id="d3"></div></div>
+  <div class="colon"><i></i><i></i></div>
+  <div class="pair"><div class="card" id="d4"></div><div class="card" id="d5"></div></div>
+</div>
+<div id="date"></div>
+<script>
+  const cards = [0,1,2,3,4,5].map(i => {
+    const el = document.getElementById('d' + i);
+    el.innerHTML = '<div class="half top"><span></span></div><div class="half bottom"><span></span></div>' +
+                   '<div class="half ftop"><span></span></div><div class="half fbottom"><span></span></div>';
+    return {el, v: null, q: el.querySelectorAll('span')};
+  });
+  function set(c, v) {
+    if (c.v === null) { c.q.forEach(s => s.textContent = v); c.v = v; return; }
+    if (c.v === v) return;
+    const old = c.v; c.v = v;
+    const [top, bottom, ftop, fbottom] = c.q;
+    top.textContent = v;           // nieuwe waarde onder de klap
+    ftop.textContent = old;        // oude bovenkant klapt weg
+    fbottom.textContent = v;       // nieuwe onderkant klapt neer
+    c.el.classList.remove('go'); void c.el.offsetWidth; c.el.classList.add('go');
+    setTimeout(() => { bottom.textContent = v; c.el.classList.remove('go'); }, 620);
+  }
+  function tick() {
+    const d = new Date();
+    const t = String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') +
+              String(d.getSeconds()).padStart(2, '0');
+    cards.forEach((c, i) => set(c, t[i]));
+    document.getElementById('date').textContent =
+      d.toLocaleDateString('nl-NL', {weekday: 'long', day: 'numeric', month: 'long'});
+  }
+  tick(); setInterval(tick, 250);
+</script></body></html>

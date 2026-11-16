@@ -32,6 +32,7 @@ public class MainActivity extends Activity {
     private FrameLayout root;
     private WebView web;
     private LinearLayout saver;
+    private WebView saverWeb;
     private View customView;
     private boolean saverOn;
     private long cornerStart;
@@ -60,6 +61,37 @@ public class MainActivity extends Activity {
         buildWeb();
         buildSaver();
         web.loadUrl(prefs.url());
+        if (prefs.webEnabled()) {
+            WebServer.start(this, new WebServer.Host() {
+                @Override public void changed() { runOnUiThread(() -> applySettings()); }
+                @Override public void reload() { runOnUiThread(() -> web.reload()); }
+            });
+        }
+    }
+
+    @Override protected void onDestroy() {
+        WebServer.stop();
+        super.onDestroy();
+    }
+
+    /** Instellingen zijn op afstand gewijzigd: alles opnieuw toepassen. */
+    private void applySettings() {
+        prefs = new Prefs(this);
+        web.loadUrl(prefs.url());
+        applyOrientation();
+        applyLock();
+        resetIdle();
+        scheduleReload();
+        updateMotion();
+    }
+
+    private void applyLock() {
+        try {
+            boolean pinned = ((android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE))
+                    .getLockTaskModeState() != android.app.ActivityManager.LOCK_TASK_MODE_NONE;
+            if (prefs.lock() && !pinned) startLockTask();      // alleen als nog niet vastgezet (geen herhaalde melding)
+            else if (!prefs.lock() && pinned) stopLockTask();
+        } catch (Exception ignored) {}
     }
 
     private void buildWeb() {
@@ -72,6 +104,7 @@ public class MainActivity extends Activity {
         s.setBuiltInZoomControls(false);
         web.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) { return false; }
+            @Override public void onPageFinished(WebView v, String u) { applyZoom(); }
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 if (r.isForMainFrame()) {
                     v.loadData("<html><body style='background:#111;color:#fff;font-family:sans-serif;"
@@ -103,27 +136,37 @@ public class MainActivity extends Activity {
         saver.setBackgroundColor(Color.BLACK);
         saver.setVisibility(View.GONE);
         saver.setClickable(true);
-        TextClock time = new TextClock(this);
-        time.setFormat24Hour("HH:mm");
-        time.setFormat12Hour("HH:mm");
-        time.setTextColor(Color.WHITE);
-        time.setTextSize(110);
-        time.setTypeface(Typeface.create("sans-serif-thin", Typeface.NORMAL));
-        time.setGravity(Gravity.CENTER);
-        TextClock date = new TextClock(this);
-        date.setFormat24Hour("EEEE d MMMM");
-        date.setFormat12Hour("EEEE d MMMM");
-        date.setTextColor(0xFFAAAAAA);
-        date.setTextSize(28);
-        date.setGravity(Gravity.CENTER);
-        saver.addView(time, new LinearLayout.LayoutParams(-2, -2));
-        saver.addView(date, new LinearLayout.LayoutParams(-2, -2));
+        saverWeb = new WebView(this);
+        saverWeb.setBackgroundColor(Color.BLACK);
+        saverWeb.getSettings().setJavaScriptEnabled(true);
+        saverWeb.getSettings().setMediaPlaybackRequiresUserGesture(false);
+        saverWeb.getSettings().setDomStorageEnabled(true);
+        saverWeb.setOnTouchListener((v, ev) -> true); // aanrakingen gaan naar de activity
+        saver.addView(saverWeb, new LinearLayout.LayoutParams(-1, -1));
         root.addView(saver, new FrameLayout.LayoutParams(-1, -1));
     }
 
     private void startSaver() {
         if (!prefs.screensaver()) return;
         saverOn = true;
+        String[] yt = prefs.saverType() == 1 ? youtubeSpec(prefs.youtube()) : null;
+        if (yt != null) {
+            boolean isList = yt[0].equals("list");
+            String html = "<html><head><style>html,body{margin:0;background:#000;height:100%}"
+                    + "iframe{position:fixed;top:0;left:0;width:100%;height:100%;border:0}</style></head><body>"
+                    + "<div id='p'></div><script src='https://www.youtube.com/iframe_api'></script><script>"
+                    + "function onYouTubeIframeAPIReady(){new YT.Player('p',{width:'100%',height:'100%',"
+                    + (isList ? "" : "videoId:'" + yt[1] + "',")
+                    + "playerVars:{autoplay:1,mute:1,controls:0,playsinline:1,rel:0,modestbranding:1,"
+                    + "disablekb:1,iv_load_policy:3" + (isList ? ",listType:'playlist',list:'" + yt[1] + "',loop:1" : "")
+                    + "},events:{onReady:function(e){e.target.mute();e.target.playVideo()},"
+                    + "onStateChange:function(e){if(e.data===0&&" + (!isList)
+                    + "){e.target.seekTo(0);e.target.playVideo()}}}})}</script></body></html>";
+            saverWeb.loadDataWithBaseURL("https://kiosk.nl.browser/", html, "text/html", "utf-8", null);
+        } else {
+            saverWeb.loadUrl("file:///android_asset/flipclock.html");
+        }
+        saverWeb.onResume();
         saver.setVisibility(View.VISIBLE);
         saver.bringToFront();
     }
@@ -138,10 +181,40 @@ public class MainActivity extends Activity {
         if (prefs.reloadMinutes() > 0) h.postDelayed(reload, prefs.reloadMinutes() * 60000L);
     }
 
+    private void stopSaverContent() {
+        saverWeb.loadUrl("about:blank"); // stopt video/klok
+        saverWeb.onPause();
+    }
+
+    /** Zet een YouTube-link, video-ID of afspeellijst om naar {soort, id} ("video" of "list"), of null. */
+    private static String[] youtubeSpec(String in) {
+        if (in == null || in.trim().isEmpty()) return null;
+        in = in.trim();
+        java.util.regex.Matcher list = java.util.regex.Pattern.compile("list=([A-Za-z0-9_-]+)").matcher(in);
+        if (list.find()) return new String[]{"list", list.group(1)};
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("(?:v=|youtu\\.be/|embed/|shorts/|live/)([A-Za-z0-9_-]{11})").matcher(in);
+        String id = m.find() ? m.group(1) : (in.matches("[A-Za-z0-9_-]{11}") ? in : null);
+        return id == null ? null : new String[]{"video", id};
+    }
+
+    private void applyZoom() {
+        int z = prefs.zoom();
+        if (z != 100) web.evaluateJavascript("document.documentElement.style.zoom='" + (z / 100f) + "'", null);
+    }
+
+    private void applyOrientation() {
+        int[] modes = {android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED,
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+                android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT};
+        setRequestedOrientation(modes[prefs.orientation()]);
+    }
+
     /** Beweging gezien door de camera: screensaver uit en timer opnieuw starten. */
     private void onMotion() {
         saverOn = false;
         saver.setVisibility(View.GONE);
+        stopSaverContent();
         resetIdle();
     }
 
@@ -191,6 +264,7 @@ public class MainActivity extends Activity {
             boolean wasOn = saverOn;
             saverOn = false;
             saver.setVisibility(View.GONE);
+            stopSaverContent();
             resetIdle();
             if (wasOn) return true; // eerste tik sluit alleen de screensaver
         }
@@ -223,7 +297,8 @@ public class MainActivity extends Activity {
         super.onResume();
         prefs = new Prefs(this);
         hideSystemUi();
-        try { if (prefs.lock()) startLockTask(); else stopLockTask(); } catch (Exception ignored) {}
+        applyOrientation();
+        applyLock();
         if (SettingsActivity.urlChanged) { SettingsActivity.urlChanged = false; web.loadUrl(prefs.url()); }
         resetIdle();
         scheduleReload();
