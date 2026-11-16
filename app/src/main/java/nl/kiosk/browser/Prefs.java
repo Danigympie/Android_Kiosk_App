@@ -17,9 +17,12 @@ final class Prefs {
     boolean autostart() { return p.getBoolean("boot", true); }
     int reloadMinutes() { return p.getInt("reload", 0); }
 
-    void save(String url, boolean ss, int ssSec, boolean lock, boolean boot, int reload) {
+    boolean motion() { return p.getBoolean("motion", true); }
+
+    void save(String url, boolean ss, int ssSec, boolean lock, boolean boot, int reload, boolean motion) {
         p.edit().putString("url", url).putBoolean("ss", ss).putInt("ssSec", ssSec)
-                .putBoolean("lock", lock).putBoolean("boot", boot).putInt("reload", reload).apply();
+                .putBoolean("lock", lock).putBoolean("boot", boot).putInt("reload", reload)
+                .putBoolean("motion", motion).apply();
     }
 
     static String hash(String pin) {

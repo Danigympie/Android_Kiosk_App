@@ -36,6 +36,9 @@ public class MainActivity extends Activity {
     private boolean saverOn;
     private long cornerStart;
     private int cornerTaps;
+    private MotionDetector motion;
+    private float downX, downY;
+    private boolean downAtTop, pulled;
     private final Handler h = new Handler(Looper.getMainLooper());
     private final Runnable showSaver = this::startSaver;
     private final Runnable reload = new Runnable() {
@@ -135,7 +138,49 @@ public class MainActivity extends Activity {
         if (prefs.reloadMinutes() > 0) h.postDelayed(reload, prefs.reloadMinutes() * 60000L);
     }
 
+    /** Beweging gezien door de camera: screensaver uit en timer opnieuw starten. */
+    private void onMotion() {
+        saverOn = false;
+        saver.setVisibility(View.GONE);
+        resetIdle();
+    }
+
+    private void updateMotion() {
+        boolean want = prefs.motion() && prefs.screensaver();
+        if (!want) { if (motion != null) motion.stop(); return; }
+        if (checkSelfPermission(android.Manifest.permission.CAMERA) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{android.Manifest.permission.CAMERA}, 1);
+            return;
+        }
+        if (motion == null) motion = new MotionDetector(this, this::onMotion);
+        motion.start();
+    }
+
+    @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
+        super.onRequestPermissionsResult(code, perms, res);
+        if (res.length > 0 && res[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) updateMotion();
+    }
+
+    /** Naar beneden vegen vanaf de bovenkant van de pagina = herladen. */
+    private void handleSwipe(MotionEvent e) {
+        switch (e.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                downX = e.getX(); downY = e.getY(); pulled = false;
+                downAtTop = customView == null && !web.canScrollVertically(-1);
+                break;
+            case MotionEvent.ACTION_MOVE:
+                float dy = e.getY() - downY, dx = e.getX() - downX;
+                if (downAtTop && !pulled && dy > 300 && dy > 2 * Math.abs(dx)) {
+                    pulled = true;
+                    Toast.makeText(this, "Pagina wordt herladen...", Toast.LENGTH_SHORT).show();
+                    web.reload();
+                }
+                break;
+        }
+    }
+
     @Override public boolean dispatchTouchEvent(MotionEvent e) {
+        handleSwipe(e);
         if (e.getAction() == MotionEvent.ACTION_DOWN) {
             // Verborgen toegang: 5x tikken in de linkerbovenhoek binnen 4 seconden
             if (e.getX() < 150 && e.getY() < 150 && !saverOn) {
@@ -182,12 +227,14 @@ public class MainActivity extends Activity {
         if (SettingsActivity.urlChanged) { SettingsActivity.urlChanged = false; web.loadUrl(prefs.url()); }
         resetIdle();
         scheduleReload();
+        updateMotion();
         web.onResume();
     }
 
     @Override protected void onPause() {
         super.onPause();
         web.onPause();
+        if (motion != null) motion.stop();
         h.removeCallbacks(showSaver);
         h.removeCallbacks(reload);
     }

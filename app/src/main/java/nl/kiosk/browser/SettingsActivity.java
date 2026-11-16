@@ -16,7 +16,7 @@ public class SettingsActivity extends Activity {
     static boolean urlChanged;
     private Prefs prefs;
     private EditText url, ssSec, reload, newPin;
-    private CheckBox ss, lock, boot;
+    private CheckBox ss, lock, boot, motion;
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
@@ -33,6 +33,7 @@ public class SettingsActivity extends Activity {
         reload = field(l, "Pagina automatisch herladen (minuten, 0 = nooit)", "" + prefs.reloadMinutes(), InputType.TYPE_CLASS_NUMBER);
         ss = check(l, "Screensaver met klok inschakelen", prefs.screensaver());
         ssSec = field(l, "Screensaver na (seconden zonder aanraking)", "" + prefs.screensaverSeconds(), InputType.TYPE_CLASS_NUMBER);
+        motion = check(l, "Screensaver uit bij beweging (camera)", prefs.motion());
         lock = check(l, "Kioskmodus (scherm vastzetten, geen navigatie)", prefs.lock());
         boot = check(l, "Automatisch starten na herstart van het apparaat", prefs.autostart());
         newPin = field(l, "Nieuwe pincode (leeg laten = ongewijzigd)", "",
@@ -86,7 +87,7 @@ public class SettingsActivity extends Activity {
             Toast.makeText(this, "Pincode moet minimaal 4 cijfers zijn", Toast.LENGTH_LONG).show();
             return;
         }
-        prefs.save(u, ss.isChecked(), Math.max(5, num(ssSec, 60)), lock.isChecked(), boot.isChecked(), num(reload, 0));
+        prefs.save(u, ss.isChecked(), Math.max(5, num(ssSec, 60)), lock.isChecked(), boot.isChecked(), num(reload, 0), motion.isChecked());
         if (!pin.isEmpty()) prefs.setPin(pin);
         finish();
     }
